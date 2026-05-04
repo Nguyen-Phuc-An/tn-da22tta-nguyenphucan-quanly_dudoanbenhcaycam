@@ -1,0 +1,36 @@
+{
+  "classes": [
+    "black_spot",
+    "canker",
+    "deficiency",
+    "greasy_spot",
+    "greening",
+    "healthy",
+    "leafminer",
+    "melanose",
+    "multiple"
+  ],
+  "class_indices": {
+    "black_spot": 0,
+    "canker": 1,
+    "deficiency": 2,
+    "greasy_spot": 3,
+    "greening": 4,
+    "healthy": 5,
+    "leafminer": 6,
+    "melanose": 7,
+    "multiple": 8
+  },
+  "class_vi": {
+    "black_spot": "Bệnh đốm đen",
+    "canker": "Bệnh loét",
+    "deficiency": "Thiếu dinh dưỡng",
+    "greasy_spot": "Bệnh đốm dầu",
+    "greening": "Bệnh vàng lá gân xanh",
+    "healthy": "Lá khỏe mạnh",
+    "leafminer": "Sâu vẽ bùa",
+    "melanose": "Bệnh nấm melanose",
+    "multiple": "Nhiều bệnh"
+  },
+  "num_classes": 9
+}

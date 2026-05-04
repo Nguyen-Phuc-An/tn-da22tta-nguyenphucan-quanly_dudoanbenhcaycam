@@ -1,0 +1,64 @@
+{
+  "info": {
+    "name": "Hệ thống Quản lý Vườn Cây - ML API",
+    "description": "Collection test API ML - Flask",
+    "version": "1.0.0"
+  },
+  "item": [
+    {
+      "name": "🏥 Health Check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:5000/health",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "5000",
+          "path": ["health"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "📋 Get All Diseases",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:5000/api/diseases",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "5000",
+          "path": ["api", "diseases"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "🔮 Predict Disease",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "image",
+              "type": "file",
+              "src": []
+            }
+          ]
+        },
+        "url": {
+          "raw": "http://localhost:5000/api/predict",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "5000",
+          "path": ["api", "predict"]
+        }
+      },
+      "response": []
+    }
+  ]
+}

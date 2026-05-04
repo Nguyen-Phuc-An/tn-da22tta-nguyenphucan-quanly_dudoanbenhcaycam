@@ -1,0 +1,453 @@
+const Prediction = require('../models/Prediction');
+const Garden = require('../models/Garden');
+const Disease = require('../models/Disease');
+const fs = require('fs');
+const path = require('path');
+const axios = require('axios');
+const FormData = require('form-data');
+const { GoogleGenerativeAI } = require("@google/generative-ai");
+
+// Tạo thư mục uploads nếu chưa tồn tại
+const uploadsDir = path.join(__dirname, '../../uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+// URL API ML (Flask)
+const ML_API_URL = process.env.ML_API_URL || 'http://localhost:5000';
+
+// Gemini AI initialization
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+console.log('🔑 GEMINI_API_KEY loaded:', GEMINI_API_KEY ? `✓ (${GEMINI_API_KEY.length} chars)` : '❌ NOT SET');
+
+const genAI = GEMINI_API_KEY ? new GoogleGenerativeAI(GEMINI_API_KEY) : null;
+
+/**
+ * Tạo tư vấn AI bằng Gemini (với nhiều bệnh)
+ */
+const generateAIAdvice = async (predictions, diseaseMap) => {
+  try {
+    if (!genAI) {
+      console.error("❌ GEMINI_API_KEY not configured");
+      return "Tư vấn AI chưa được cấu hình. Vui lòng kiểm tra GEMINI_API_KEY.";
+    }
+
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+    const diseasesList = predictions.map((p, i) => {
+      const d = diseaseMap[p.label];
+      if (!d) return "";
+
+      return `
+${i + 1}. ${d.ten_benh} (${Math.round(p.confidence * 100)}%)
+
+* Mô tả: ${d.mo_ta}
+* Nguyên nhân: ${d.nguyen_nhan}
+* Hướng xử lý: ${d.huong_xu_ly}
+      `;
+    }).join('\n');
+
+    const prompt = `
+Bạn là chuyên gia nông nghiệp.
+
+Cây có thể mắc các bệnh sau:
+
+${diseasesList}
+
+Yêu cầu:
+
+* Xác định bệnh chính
+* Nếu nhiều bệnh → đưa giải pháp tổng hợp
+* Nếu là cây khỏe → chúc mừng
+* Viết ngắn gọn, dễ hiểu (3-5 câu)
+    `;
+
+    const result = await model.generateContent(prompt);
+    console.log("✓ Gemini advice generated successfully");
+    return result.response.text();
+  } catch (error) {
+    console.error("❌ Lỗi Gemini:", {
+      message: error.message,
+      code: error.code,
+      status: error.status
+    });
+    return "Không thể tạo tư vấn AI lúc này. Vui lòng thử lại sau.";
+  }
+};
+
+/**
+ * Upload ảnh và gọi API ML để dự đoán bệnh
+ * 
+ * Body:
+ *   - garden_id (required)
+ *   - image file (required)
+ * 
+ * Luồng:
+ * 1. Kiểm tra file upload
+ * 2. Kiểm tra quyền (garden_id)
+ * 3. Gửi ảnh sang Flask API
+ * 4. Nhận kết quả dự đoán
+ * 5. Lưu vào MongoDB
+ * 6. Trả kết quả
+ */
+const uploadPrediction = async (req, res) => {
+  try {
+    const { garden_id } = req.body;
+
+    // ✓ Kiểm tra upload file
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'Vui lòng tải lên hình ảnh',
+      });
+    }
+
+    // ✓ Kiểm tra vườn tồn tại
+    const garden = await Garden.findById(garden_id);
+    if (!garden) {
+      // Xóa file nếu vườn không tồn tại
+      fs.unlink(req.file.path, (err) => {
+        if (err) console.error('Lỗi xóa file:', err);
+      });
+      
+      return res.status(404).json({
+        success: false,
+        message: 'Vườn không tồn tại',
+      });
+    }
+
+    // ✓ Kiểm tra quyền
+    if (garden.user_id.toString() !== req.userId) {
+      // Xóa file nếu không có quyền
+      fs.unlink(req.file.path, (err) => {
+        if (err) console.error('Lỗi xóa file:', err);
+      });
+      
+      return res.status(403).json({
+        success: false,
+        message: 'Bạn không có quyền dự đoán cho vườn này',
+      });
+    }
+
+    console.log(`\n📤 Gửi ảnh sang ML API: ${ML_API_URL}`);
+
+    // ✓ 1. Gửi ảnh sang Flask API ML
+    const fileStream = fs.createReadStream(req.file.path);
+    const formData = new FormData();
+    formData.append('image', fileStream, req.file.filename);
+
+    let mlResponse;
+    try {
+      mlResponse = await axios.post(`${ML_API_URL}/predict`, formData, {
+        headers: formData.getHeaders(),
+        timeout: 30000, // 30 giây timeout
+      });
+    } catch (mlError) {
+      console.error(`❌ Lỗi gọi ML API:`, mlError.message);
+      
+      // Xóa file nếu ML API lỗi
+      fs.unlink(req.file.path, (err) => {
+        if (err) console.error('Lỗi xóa file:', err);
+      });
+      
+      return res.status(500).json({
+        success: false,
+        message: 'Không thể kết nối AI. Vui lòng thử lại sau.',
+        error: mlError.message,
+      });
+    }
+
+    // ✓ 2. Kiểm tra response từ ML
+    if (!mlResponse.data.success) {
+      console.error('❌ ML API lỗi:', mlResponse.data.message);
+      
+      fs.unlink(req.file.path, (err) => {
+        if (err) console.error('Lỗi xóa file:', err);
+      });
+      
+      return res.status(500).json({
+        success: false,
+        message: 'AI không thể phân tích ảnh. Vui lòng thử ảnh khác.',
+      });
+    }
+
+    // ✓ 3. Lấy kết quả dự đoán từ Flask
+    const mlData = mlResponse.data.data;
+    console.log(`✓ ML API trả kết quả: ${mlData.disease_en} (confidence: ${mlData.confidence})`);
+
+    // ✓ 3.1 Xử lý top_3: convert 100 → 1, sort, filter
+    let predictions = mlData.top_3.map(item => ({
+      label: item.disease_en,
+      confidence: item.confidence / 100
+    }));
+
+    predictions = predictions
+      .filter(p => p.confidence > 0)
+      .sort((a, b) => b.confidence - a.confidence);
+
+    console.log(`✓ Top 3 predictions:`, predictions.length);
+
+    // ✓ 3.2 Lấy danh sách bệnh từ DB dùng find (không findOne)
+    const diseases = await Disease.find({
+      ten_benh_en: { $in: predictions.map(p => p.label) }
+    });
+
+    if (diseases.length === 0) {
+      console.error(`❌ Không tìm thấy bệnh cho predictions`);
+      
+      fs.unlink(req.file.path, (err) => {
+        if (err) console.error('Lỗi xóa file:', err);
+      });
+      
+      return res.status(500).json({
+        success: false,
+        message: `Không tìm thấy thông tin bệnh trong database`,
+      });
+    }
+
+    // ✓ 3.3 Map diseaseMap để tra cứu nhanh
+    const diseaseMap = {};
+    diseases.forEach(d => {
+      diseaseMap[d.ten_benh_en] = d;
+    });
+
+    // ✓ 3.4 Xác định bệnh chính (prediction đầu tiên)
+    const mainPrediction = predictions[0];
+    const mainDisease = diseaseMap[mainPrediction.label];
+
+    if (!mainDisease) {
+      console.error(`❌ Không tìm thấy bệnh chính: ${mainPrediction.label}`);
+      
+      fs.unlink(req.file.path, (err) => {
+        if (err) console.error('Lỗi xóa file:', err);
+      });
+      
+      return res.status(500).json({
+        success: false,
+        message: `Không tìm thấy thông tin bệnh chính`,
+      });
+    }
+
+    // ✓ 4. Đường dẫn file
+    const hinh_anh = `/uploads/${req.file.filename}`;
+
+    // ✓ 5. Tạo tư vấn AI bằng Gemini trước
+    const advice = await generateAIAdvice(predictions, diseaseMap);
+
+    // ✓ 6. Tạo prediction trong database (lưu bệnh chính + tư vấn)
+    const prediction = new Prediction({
+      user_id: req.userId,
+      garden_id,
+      hinh_anh,
+      ket_qua_benh: mainDisease.ten_benh,  // Tên bệnh tiếng Việt từ bệnh chính
+      do_tin_cay: Math.round(mainPrediction.confidence * 100),  // Convert 0-1 → 0-100
+      mo_ta_benh: mainDisease.mo_ta || 'Không có thông tin',
+      huong_xu_ly: mainDisease.huong_xu_ly || 'Cần tư vấn chuyên gia',
+      tuvan_ai: advice,  // Lưu tư vấn AI
+      ngay_du_doan: new Date(),
+    });
+
+    await prediction.save();
+    console.log(`✓ Lưu dự đoán vào database`);
+
+    // ✓ 7. Trả kết quả đầy đủ
+    res.status(201).json({
+      success: true,
+      message: 'Dự đoán thành công',
+      data: {
+        id: prediction._id,
+        main_disease: mainDisease.ten_benh,
+        confidence: mainPrediction.confidence,
+        
+        top_3: predictions.map(p => {
+          const d = diseaseMap[p.label];
+          return {
+            ten_benh: d?.ten_benh,
+            ten_benh_en: p.label,
+            confidence: p.confidence
+          };
+        }),
+        
+        advice,
+        ngay_du_doan: prediction.ngay_du_doan,
+      },
+    });
+
+  } catch (error) {
+    // Xóa file nếu lỗi
+    if (req.file) {
+      fs.unlink(req.file.path, (err) => {
+        if (err) console.error('Lỗi xóa file:', err);
+      });
+    }
+
+    console.error('❌ Lỗi dự đoán:', error.message);
+    res.status(500).json({
+      success: false,
+      message: 'Lỗi hệ thống. Vui lòng thử lại sau.',
+      error: error.message,
+    });
+  }
+};
+
+// Lấy danh sách dự đoán của user
+const getPredictionsByUser = async (req, res) => {
+  try {
+    const predictions = await Prediction.find({ user_id: req.userId })
+      .populate('garden_id', 'ten_vuon')
+      .sort({ ngay_du_doan: -1 });
+
+    console.log('✓ Lấy danh sách dự đoán:', predictions.length);
+
+    res.json({
+      success: true,
+      count: predictions.length,
+      data: predictions,
+    });
+  } catch (error) {
+    console.error('❌ Lỗi lấy dự đoán:', error.message);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// Lấy chi tiết 1 dự đoán
+const getPredictionById = async (req, res) => {
+  try {
+    const prediction = await Prediction.findById(req.params.id).populate(
+      'garden_id',
+      'ten_vuon'
+    );
+
+    if (!prediction) {
+      return res.status(404).json({
+        success: false,
+        message: 'Dự đoán không tồn tại',
+      });
+    }
+
+    // Kiểm tra quyền
+    if (prediction.user_id.toString() !== req.userId) {
+      return res.status(403).json({
+        success: false,
+        message: 'Bạn không có quyền xem dự đoán này',
+      });
+    }
+
+    res.json({
+      success: true,
+      data: prediction,
+    });
+  } catch (error) {
+    console.error('❌ Lỗi lấy chi tiết dự đoán:', error.message);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// Xóa dự đoán
+const deletePrediction = async (req, res) => {
+  try {
+    console.log(`\n🔍 DELETE REQUEST - ID: ${req.params.id}, User: ${req.userId}`);
+    
+    const prediction = await Prediction.findById(req.params.id);
+
+    if (!prediction) {
+      console.log(`❌ Prediction not found: ${req.params.id}`);
+      return res.status(404).json({
+        success: false,
+        message: 'Dự đoán không tồn tại',
+      });
+    }
+
+    console.log(`✓ Found prediction`);
+    console.log(`  - prediction.user_id: ${prediction.user_id} (type: ${typeof prediction.user_id})`);
+    console.log(`  - req.userId: ${req.userId} (type: ${typeof req.userId})`);
+    console.log(`  - prediction.user_id.toString(): ${prediction.user_id.toString()}`);
+    console.log(`  - Match: ${prediction.user_id.toString() === req.userId}`);
+
+    // Kiểm tra quyền
+    if (prediction.user_id.toString() !== req.userId) {
+      console.log(`❌ Permission denied - user mismatch`);
+      return res.status(403).json({
+        success: false,
+        message: 'Bạn không có quyền xóa dự đoán này',
+      });
+    }
+
+    // Xóa file
+    if (prediction.hinh_anh) {
+      const filePath = path.join(__dirname, '../../' + prediction.hinh_anh);
+      fs.unlink(filePath, (err) => {
+        if (err) console.error('Lỗi xóa file:', err);
+      });
+    }
+
+    await Prediction.findByIdAndDelete(req.params.id);
+    console.log('✓ Xóa dự đoán thành công');
+
+    res.json({
+      success: true,
+      message: 'Xóa dự đoán thành công',
+    });
+  } catch (error) {
+    console.error('❌ Lỗi xóa dự đoán:', error.message);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// Lấy tất cả dự đoán (chỉ admin)
+const getAllPredictions = async (req, res) => {
+  try {
+    console.log('👉 GET /api/predictions called');
+
+    // Kiểm tra admin role
+    const User = require('../models/User');
+    const currentUser = await User.findById(req.userId);
+    
+    if (!currentUser || currentUser.vai_tro !== 'admin') {
+      console.log('❌ Access denied - not admin');
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied - Admin only',
+      });
+    }
+
+    console.log('✓ Admin access granted');
+
+    // Lấy tất cả predictions, populate user và garden info
+    const predictions = await Prediction.find()
+      .populate('user_id', 'ho_ten email vai_tro')
+      .populate('garden_id', 'ten_vuon dien_tich')
+      .sort({ ngay_du_doan: -1 })
+      .limit(100);
+
+    console.log(`✓ Retrieved ${predictions.length} predictions`);
+
+    res.json({
+      success: true,
+      data: predictions,
+    });
+  } catch (error) {
+    console.error('❌ Lỗi lấy danh sách dự đoán:', error.message);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+module.exports = {
+  uploadPrediction,
+  getPredictionsByUser,
+  getPredictionById,
+  deletePrediction,
+  getAllPredictions,
+};
