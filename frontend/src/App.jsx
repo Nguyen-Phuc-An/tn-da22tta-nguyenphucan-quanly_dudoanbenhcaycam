@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import LoginPage from './pages/LoginPage';
@@ -32,7 +32,9 @@ import ProfilePage from './pages/User/ProfilePage';
 import GuidePage from './pages/User/GuidePage';
 import PrivacyPage from './pages/User/PrivacyPage';
 import DiseaseLibraryPage from './pages/User/DiseaseLibraryPage';
+import MaintenancePage from './pages/System/MaintenancePage';
 import authService from './services/authService';
+import apiClient from './services/apiClient';
 
 const RootRedirect = () => {
   if (!authService.isLoggedIn()) {
@@ -53,39 +55,119 @@ const ScrollToTop = () => {
   return null;
 };
 
+const MaintenanceGate = ({ children, maintenanceMode, loading }) => {
+  const location = useLocation();
+  const user = authService.getCurrentUser();
+  const isAdmin = user?.vai_tro === 'admin';
+  const isAuthPage = location.pathname === '/login' || location.pathname === '/register';
+  const isAdminPath = location.pathname.startsWith('/admin');
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white">
+        <div className="text-center space-y-3">
+          <div className="h-12 w-12 rounded-full border-4 border-white/20 border-t-white animate-spin mx-auto" />
+          <p className="text-sm text-slate-300">Đang kiểm tra trạng thái hệ thống...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!maintenanceMode) {
+    return children;
+  }
+
+  if (isAuthPage) {
+    return children;
+  }
+
+  if (isAdmin && isAdminPath) {
+    return children;
+  }
+
+  return <MaintenancePage />;
+};
+
 function App() {
+  const [maintenanceMode, setMaintenanceMode] = useState(false);
+  const [maintenanceLoading, setMaintenanceLoading] = useState(true);
+  const [authLoading, setAuthLoading] = useState(true);
+
   useEffect(() => {
-    // Check if user is already logged in (for page refresh)
-    const token = authService.getToken();
-    if (token) {
-      console.log('✓ User is logged in');
-    }
+    const syncCurrentUser = async () => {
+      const token = authService.getToken();
+
+      if (!token) {
+        setAuthLoading(false);
+        return;
+      }
+
+      try {
+        const response = await apiClient.get('/auth/profile');
+        if (response.data.success && response.data.data) {
+          localStorage.setItem('user', JSON.stringify(response.data.data));
+        }
+      } catch (error) {
+        console.error('❌ Failed to sync current user:', error);
+      } finally {
+        setAuthLoading(false);
+      }
+    };
+
+    syncCurrentUser();
+  }, []);
+
+  useEffect(() => {
+    const loadMaintenanceStatus = async () => {
+      try {
+        const res = await apiClient.get('/system/maintenance');
+        if (res.data.success) {
+          setMaintenanceMode(Boolean(res.data.data?.maintenanceMode));
+        }
+      } catch (error) {
+        console.error('❌ Failed to load maintenance status:', error);
+      } finally {
+        setMaintenanceLoading(false);
+      }
+    };
+
+    loadMaintenanceStatus();
   }, []);
 
   return (
     <>
       <BrowserRouter>
         <ScrollToTop />
-        <Routes>
-          {/* Auth Routes */}
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/register" element={<RegisterPage />} />
+        {authLoading ? (
+          <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white">
+            <div className="text-center space-y-3">
+              <div className="h-12 w-12 rounded-full border-4 border-white/20 border-t-white animate-spin mx-auto" />
+              <p className="text-sm text-slate-300">Đang xác thực tài khoản...</p>
+            </div>
+          </div>
+        ) : (
+          <MaintenanceGate maintenanceMode={maintenanceMode} loading={maintenanceLoading}>
+          <Routes>
+            {/* Auth Routes */}
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/register" element={<RegisterPage />} />
+            <Route path="/maintenance" element={<MaintenancePage />} />
 
-          {/* Root route - redirect based on role */}
-          <Route
-            path="/"
-            element={<RootRedirect />}
-          />
+            {/* Root route - redirect based on role */}
+            <Route
+              path="/"
+              element={<RootRedirect />}
+            />
 
-          {/* User Routes */}
-          <Route
-            path="/user"
-            element={
-              <PrivateRoute>
-                <HomePage />
-              </PrivateRoute>
-            }
-          />
+            {/* User Routes */}
+            <Route
+              path="/user"
+              element={
+                <PrivateRoute>
+                  <HomePage />
+                </PrivateRoute>
+              }
+            />
           <Route
             path="/user/gardens"
             element={
@@ -184,15 +266,15 @@ function App() {
             }
           />
 
-          {/* Admin Routes */}
-          <Route
-            path="/admin"
-            element={
-              <AdminRoute>
-                <AdminDashboardPage />
-              </AdminRoute>
-            }
-          />
+            {/* Admin Routes */}
+            <Route
+              path="/admin"
+              element={
+                <AdminRoute>
+                  <AdminDashboardPage />
+                </AdminRoute>
+              }
+            />
           <Route
             path="/admin/users"
             element={
@@ -301,9 +383,11 @@ function App() {
             }
           />
 
-          {/* Catch all */}
-          <Route path="*" element={<RootRedirect />} />
-        </Routes>
+            {/* Catch all */}
+            <Route path="*" element={<RootRedirect />} />
+          </Routes>
+          </MaintenanceGate>
+        )}
       </BrowserRouter>
 
       {/* Toast Notification */}

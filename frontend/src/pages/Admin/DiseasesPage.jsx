@@ -20,6 +20,19 @@ const DiseasesPage = () => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
   const { register, handleSubmit, reset } = useForm();
 
+  const emptyDiseaseForm = {
+    ten_benh: '',
+    ten_benh_en: '',
+    mo_ta: '',
+    nguyen_nhan: '',
+    trieu_chung: '',
+    huong_xu_ly: '',
+    loai_cay_bi_anh_huong: [],
+    muc_do_nguy_hiem: '',
+    goi_y_phan_bon: [],
+    goi_y_thuoc: [],
+  };
+
   useEffect(() => {
     fetchDiseases();
     fetchSuggestions();
@@ -76,13 +89,8 @@ const DiseasesPage = () => {
         toast.success('Bệnh được tạo thành công');
         setDiseases([...diseases, res.data.data]);
       }
-      reset();
-      setSelectedFertilizers([]);
-      setSelectedPesticides([]);
-      setFertilizerSearch('');
-      setPesticideSearch('');
+      clearFormState();
       setShowForm(false);
-      setEditingId(null);
     } catch (err) {
       console.error('Error saving disease:', err);
       toast.error(err.response?.data?.message || 'Không thể lưu bệnh');
@@ -105,12 +113,17 @@ const DiseasesPage = () => {
   };
 
   const clearFormState = () => {
-    reset();
+    reset(emptyDiseaseForm);
     setSelectedFertilizers([]);
     setSelectedPesticides([]);
     setFertilizerSearch('');
     setPesticideSearch('');
     setEditingId(null);
+  };
+
+  const handleAddNewDisease = () => {
+    clearFormState();
+    setShowForm(true);
   };
 
   const addSelectedFertilizer = (fertilizerId) => {
@@ -186,7 +199,6 @@ const DiseasesPage = () => {
 
   const getDangerBadge = (level) => {
     const colors = {
-      "Rất Cao": 'bg-red-100 text-red-800',
       "Cao": 'bg-orange-100 text-orange-800',
       "Trung bình": 'bg-yellow-100 text-yellow-800',
       "Thấp": 'bg-green-100 text-green-800',
@@ -201,7 +213,6 @@ const DiseasesPage = () => {
       Low: 'Thấp',
       Medium: 'Trung bình',
       High: 'Cao',
-      Critical: 'Rất Cao',
     };
 
     return mapping[level] || level || '';
@@ -214,10 +225,7 @@ const DiseasesPage = () => {
         <div className="mb-6 flex justify-between items-center">
           <h1 className="text-3xl font-bold text-gray-900">Quản Lý Bệnh</h1>
           <button
-            onClick={() => {
-              clearFormState();
-              setShowForm(!showForm);
-            }}
+            onClick={handleAddNewDisease}
             className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center gap-2"
           >
             <FaPlus /> Thêm Bệnh Mới
@@ -228,7 +236,7 @@ const DiseasesPage = () => {
         {showForm && (
           <div className="bg-white rounded-lg shadow p-6 mb-6">
             <h2 className="text-xl font-bold text-gray-900 mb-4">
-              {editingId ? <><FaEdit /> Sửa Bệnh</> : <><FaPlus /> Tạo Bệnh Mới</>}
+              {editingId ? <> Sửa Bệnh</> : <> Tạo Bệnh Mới</>}
             </h2>
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -264,7 +272,7 @@ const DiseasesPage = () => {
                   {...register('mo_ta')}
                   rows="3"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
-                  placeholder="Describe the disease..."
+                  placeholder="Mô tả bệnh..."
                 />
               </div>
 
@@ -276,7 +284,7 @@ const DiseasesPage = () => {
                   {...register('nguyen_nhan')}
                   rows="2"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
-                  placeholder="Cause of disease..."
+                  placeholder="Nguyên nhân gây bệnh..."
                 />
               </div>
 
@@ -288,7 +296,7 @@ const DiseasesPage = () => {
                   {...register('huong_xu_ly')}
                   rows="2"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
-                  placeholder="How to treat..."
+                  placeholder="Cách xử lý..."
                 />
               </div>
 
@@ -407,7 +415,6 @@ const DiseasesPage = () => {
                   <option value="Thấp">Thấp</option>
                   <option value="Trung bình">Trung bình</option>
                   <option value="Cao">Cao</option>
-                  <option value="Rất Cao">Rất Cao</option>
                 </select>
               </div>
 

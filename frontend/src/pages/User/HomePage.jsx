@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import {
   FaHome, FaCamera, FaFlask, FaLeaf, FaChartBar, FaMicroscope, FaDollarSign,
   FaVirus, FaBolt, FaRedo, FaBrain, FaExclamationTriangle, FaImage, FaClock,
-  FaClipboardList, FaTrophy, FaList, FaCircle, FaFileAlt
+  FaClipboardList, FaTrophy, FaList, FaCircle, FaFileAlt, FaEye, FaHourglassHalf
 } from 'react-icons/fa';
 import UserLayout from '../../components/User/UserLayout';
 import apiClient from '../../services/apiClient';
@@ -206,193 +206,199 @@ const HomePage = () => {
         </div>
 
         {/* Prediction Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-          {/* Upload Form */}
-          <div className="bg-white rounded-xl shadow-md p-6">
-            <h2 className="text-2xl font-bold text-gray-900 mb-4 flex items-center gap-2"><FaMicroscope className="text-green-600" /> Dự đoán bệnh</h2>
-            <form onSubmit={handlePredict} className="space-y-4">
-              {/* Garden Select */}
+        <div className="space-y-6 mb-8">
+          <div className="bg-white rounded-2xl shadow-md border border-gray-100 p-6 md:p-8">
+            <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3 mb-6">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Chọn vườn
-                </label>
-                <select
-                  value={selectedGarden}
-                  onChange={(e) => setSelectedGarden(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                  disabled={gardens.length === 0}
-                >
-                  <option value="">-- Chọn vườn --</option>
-                  {gardens.map((g) => (
-                    <option key={g._id} value={g._id}>
-                      {g.ten_vuon}
-                    </option>
-                  ))}
-                </select>
-                {gardens.length === 0 && (
-                  <p className="text-sm text-orange-500 mt-2 flex items-center gap-2">
-                    <FaExclamationTriangle /> Vui lòng <Link to="/user/gardens/new" className="underline font-semibold">thêm vườn</Link> trước
-                  </p>
-                )}
-              </div>
-
-              {/* Image Upload */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Tải ảnh lá cây
-                </label>
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center cursor-pointer hover:border-green-500 transition">
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    onChange={handleImageChange}
-                    className="hidden"
-                    id="image-input"
-                  />
-                  <label htmlFor="image-input" className="cursor-pointer">
-                    {preview ? (
-                      <div>
-                        <img src={preview} alt="preview" className="w-32 h-32 object-cover mx-auto rounded-lg mb-2" />
-                        <p className="text-green-600 font-semibold">Đã chọn ảnh</p>
-                      </div>
-                    ) : (
-                      <div>
-                        <p className="text-2xl mb-2"><FaImage className="mx-auto" /></p>
-                        <p className="text-gray-700 font-semibold">Chọn hoặc kéo ảnh vào đây</p>
-                        <p className="text-gray-500 text-sm">PNG, JPG, GIF up to 5MB</p>
-                      </div>
-                    )}
-                  </label>
-                </div>
-              </div>
-
-              {/* Submit */}
-              <button
-                type="submit"
-                disabled={predicting || !selectedGarden || gardens.length === 0}
-                className="w-full bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 transition font-semibold disabled:bg-gray-400 flex items-center justify-center gap-2"
-              >
-                {predicting ? (<><FaMicroscope /> Đang dự đoán...</>) : (<><FaMicroscope /> Dự đoán ngay</>)}
-              </button>
-              <div className="bg-green-50 rounded-xl shadow-md p-6 border-2 border-green-200">
-                <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2"><FaFlask className="text-green-600" /> Mẹo</h3>
-                <p className="text-gray-700">
-                  Hãy sử dụng dự đoán AI để phát hiện sớm bệnh cho cây trồng. Chụp ảnh rõ nét những lá bị bệnh để có kết quả chính xác nhất.
+                <p className="text-sm font-semibold uppercase tracking-[0.2em] text-green-600 mb-2">Dự đoán AI</p>
+                <h2 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
+                  <FaMicroscope className="text-green-600" /> Dự đoán bệnh
+                </h2>
+                <p className="text-sm text-gray-500 mt-2">
+                  Tải ảnh lá cây lên để hệ thống phân tích và trả kết quả dự đoán.
                 </p>
               </div>
-            </form>
-          </div>
+              <div className="text-sm text-gray-500 bg-gray-50 border border-gray-200 rounded-full px-4 py-2 self-start md:self-auto">
+                Chọn vườn, tải ảnh và xem kết quả ngay
+              </div>
+            </div>
 
-          {/* Result Display */}
-          <div className="bg-white rounded-xl shadow-md p-6">
-            {predictionResult ? (
-              <div className="space-y-6">
-                <h3 className="text-2xl font-bold text-gray-900">Kết quả dự đoán</h3>
-
-                {/* Top Result */}
-                <div className="bg-gradient-to-r from-green-50 to-green-100 rounded-xl p-5 border-2 border-green-300">
-                  <p className="text-gray-600 text-sm mb-1 flex items-center gap-2"><FaTrophy className="text-yellow-500" /> Bệnh chính xác suất cao</p>
-                  <p className="text-3xl font-bold text-gray-900">{predictionResult.main_disease}</p>
-                  <div className="mt-3 flex items-center gap-2">
-                    <div className="flex-1 bg-gray-300 rounded-full h-2">
-                      <div
-                        className="bg-green-600 h-2 rounded-full transition-all"
-                        style={{ width: `${Math.round(predictionResult.confidence * 100)}%` }}
-                      />
-                    </div>
-                    <p className="text-lg font-bold text-green-600 min-w-fit">
-                      {Math.round(predictionResult.confidence * 100)}%
-                    </p>
-                  </div>
-                </div>
-
-                {/* Top 3 Predictions */}
-                {predictionResult.top_3 && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <form onSubmit={handlePredict} className="space-y-5">
                   <div>
-                    <h4 className="font-bold text-gray-900 mb-3 flex items-center gap-2"><FaList className="text-blue-600" /> Top 3 bệnh khả năng</h4>
-                    <div className="space-y-2">
-                      {predictionResult.top_3.map((pred, idx) => (
-                        <div
-                          key={idx}
-                          className="bg-gray-100 rounded-lg p-3 flex justify-between items-center hover:bg-gray-150 transition"
-                        >
-                          <div>
-                            <p className="font-semibold text-gray-900">
-                              #{idx + 1} {pred.ten_benh}
-                            </p>
-                            <p className="text-sm text-gray-600">{pred.ten_benh_en}</p>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-lg font-bold text-blue-600">
-                              {Math.round(pred.confidence * 100)}%
-                            </p>
-                          </div>
-                        </div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Chọn vườn</label>
+                    <select
+                      value={selectedGarden}
+                      onChange={(e) => setSelectedGarden(e.target.value)}
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                      disabled={gardens.length === 0}
+                    >
+                      <option value="">-- Chọn vườn --</option>
+                      {gardens.map((g) => (
+                        <option key={g._id} value={g._id}>
+                          {g.ten_vuon}
+                        </option>
                       ))}
+                    </select>
+                    {gardens.length === 0 && (
+                      <p className="text-sm text-orange-500 mt-2 flex items-center gap-2">
+                        <FaExclamationTriangle /> Vui lòng <Link to="/user/gardens/new" className="underline font-semibold">thêm vườn</Link> trước
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Tải ảnh lá cây</label>
+                    <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center cursor-pointer hover:border-green-500 transition bg-gray-50/60">
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/*"
+                        onChange={handleImageChange}
+                        className="hidden"
+                        id="image-input"
+                      />
+                      <label htmlFor="image-input" className="cursor-pointer block">
+                        {preview ? (
+                          <div>
+                            <img src={preview} alt="preview" className="w-32 h-32 object-cover mx-auto rounded-lg mb-3 shadow-sm" />
+                            <p className="text-green-600 font-semibold">Đã chọn ảnh</p>
+                          </div>
+                        ) : (
+                          <div>
+                            <p className="text-2xl mb-2"><FaImage className="mx-auto text-gray-500" /></p>
+                            <p className="text-gray-700 font-semibold">Chọn hoặc kéo ảnh vào đây</p>
+                            <p className="text-gray-500 text-sm mt-1">PNG, JPG, GIF up to 5MB</p>
+                          </div>
+                        )}
+                      </label>
                     </div>
                   </div>
-                )}
 
-                {/* AI Advice */}
-                {predictionResult?.advice && (
-                  <div className="bg-blue-50 rounded-xl p-5 border-2 border-blue-300">
-                    <h4 className="font-bold text-gray-900 mb-3 flex items-center gap-2"><FaBrain className="text-blue-600" /> Tư vấn AI từ Gemini</h4>
-                    <p className="text-gray-800 leading-relaxed whitespace-pre-wrap">{predictionResult.advice}</p>
-                  </div>
-                )}
-
-                {/* Grad-CAM */}
-                {getGradCamUrl(predictionResult.grad_cam_path || predictionResult.grad_cam?.overlay_path) && (
-                  <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-sm">
-                    <h4 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
-                      <FaEye className="text-red-600" /> Grad-CAM - Vùng ảnh quan trọng
-                    </h4>
-                    <img
-                      src={getGradCamUrl(predictionResult.grad_cam_path || predictionResult.grad_cam?.overlay_path)}
-                      alt="Grad-CAM overlay"
-                      className="w-full rounded-lg border border-gray-200 object-contain bg-gray-50"
-                    />
-                  </div>
-                )}
-
-                {/* Actions */}
-                <div className="flex gap-2">
                   <button
-                    onClick={() => {
-                      setPredictionResult(null);
-                      setImage(null);
-                      setPreview(null);
-                      setShowAdvice(false);
-                      // Reset file input
-                      if (fileInputRef.current) {
-                        fileInputRef.current.value = '';
-                      }
-                    }}
-                    className="flex-1 bg-gray-600 text-white py-2 rounded-lg hover:bg-gray-700 transition font-semibold flex items-center justify-center gap-2"
+                    type="submit"
+                    disabled={predicting || !selectedGarden || gardens.length === 0}
+                    className="w-full bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 transition font-semibold disabled:bg-gray-400 flex items-center justify-center gap-2"
                   >
-                    <FaRedo /> Dự đoán lại
+                    {predicting ? (<><FaHourglassHalf className="animate-spin" /> Đang dự đoán...</>) : (<><FaMicroscope /> Dự đoán ngay</>)}
                   </button>
-                  {predictionResult?.advice && (
-                    <button
-                      onClick={() => {
-                        // Scroll to advice section
-                        document.querySelector('.bg-blue-50')?.scrollIntoView({ behavior: 'smooth' });
-                      }}
-                      className="flex-1 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition font-semibold flex items-center justify-center gap-2"
-                    >
-                      <FaBrain /> Xem tư vấn AI
-                    </button>
-                  )}
+                </form>
+
+                <div className="mt-5 bg-green-50 rounded-xl shadow-sm p-5 border border-green-200">
+                  <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+                    <FaFlask className="text-green-600" /> Mẹo chụp ảnh
+                  </h3>
+                  <p className="text-gray-700 leading-relaxed">
+                    Hãy chụp lá bệnh rõ nét, đủ sáng và lấy gần vùng tổn thương để kết quả dự đoán chính xác hơn.
+                  </p>
                 </div>
               </div>
-            ) : (
-              <div className="text-center text-gray-500 py-12">
-                <p className="text-4xl mb-4"><FaChartBar className="mx-auto" /></p>
-                <p className="font-semibold">Kết quả dự đoán sẽ hiển thị ở đây</p>
-                <p className="text-sm mt-2">Upload ảnh lá cây bên trái để bắt đầu</p>
+
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                {predictionResult ? (
+                  <div className="space-y-6">
+                    <h3 className="text-2xl font-bold text-gray-900">Kết quả dự đoán</h3>
+
+                    <div className="bg-green-50 rounded-xl p-4 border-2 border-green-200">
+                      <p className="text-gray-600 text-sm flex items-center gap-2">
+                        <FaTrophy className="text-yellow-500" /> Bệnh chính xác suất cao
+                      </p>
+                      <p className="text-2xl font-bold text-gray-900 mt-1">{predictionResult.main_disease}</p>
+                      <div className="mt-3 flex items-center gap-2">
+                        <div className="flex-1 bg-gray-300 rounded-full h-2 overflow-hidden">
+                          <div
+                            className="bg-green-600 h-2 rounded-full transition-all"
+                            style={{ width: `${Math.round(predictionResult.confidence * 100)}%` }}
+                          />
+                        </div>
+                        <p className="text-lg font-bold text-green-600 min-w-fit">
+                          {Math.round(predictionResult.confidence * 100)}%
+                        </p>
+                      </div>
+                    </div>
+
+                    {predictionResult.top_3 && (
+                      <div>
+                        <h4 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
+                          <FaList className="text-blue-600" /> Top 3 bệnh khả năng
+                        </h4>
+                        <div className="space-y-2">
+                          {predictionResult.top_3.map((pred, idx) => (
+                            <div key={idx} className="bg-gray-50 rounded-lg p-3 flex justify-between items-center hover:bg-gray-100 transition border border-gray-200">
+                              <div>
+                                <p className="font-semibold text-gray-900">#{idx + 1} {pred.ten_benh}</p>
+                                <p className="text-sm text-gray-600">{pred.ten_benh_en}</p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-lg font-bold text-blue-600">
+                                  {Math.round(pred.confidence * 100)}%
+                                </p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {predictionResult?.advice && (
+                      <div className="bg-blue-50 rounded-xl p-5 border border-blue-200">
+                        <h4 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
+                          <FaBrain className="text-blue-600" /> Tư vấn AI từ Gemini
+                        </h4>
+                        <p className="text-gray-800 leading-relaxed whitespace-pre-wrap">{predictionResult.advice}</p>
+                      </div>
+                    )}
+
+                    {getGradCamUrl(predictionResult.grad_cam_path || predictionResult.grad_cam?.overlay_path) && (
+                      <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-sm">
+                        <h4 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
+                          <FaEye className="text-red-600" /> Grad-CAM - Vùng ảnh quan trọng
+                        </h4>
+                        <img
+                          src={getGradCamUrl(predictionResult.grad_cam_path || predictionResult.grad_cam?.overlay_path)}
+                          alt="Grad-CAM overlay"
+                          className="w-full rounded-lg border border-gray-200 object-contain bg-gray-50"
+                        />
+                      </div>
+                    )}
+
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          setPredictionResult(null);
+                          setImage(null);
+                          setPreview(null);
+                          setShowAdvice(false);
+                          if (fileInputRef.current) {
+                            fileInputRef.current.value = '';
+                          }
+                        }}
+                        className="flex-1 bg-gray-600 text-white py-2 rounded-lg hover:bg-gray-700 transition font-semibold flex items-center justify-center gap-2"
+                      >
+                        <FaRedo /> Dự đoán lại
+                      </button>
+                      {predictionResult?.advice && (
+                        <button
+                          onClick={() => {
+                            document.querySelector('.bg-blue-50')?.scrollIntoView({ behavior: 'smooth' });
+                          }}
+                          className="flex-1 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition font-semibold flex items-center justify-center gap-2"
+                        >
+                          <FaBrain /> Xem tư vấn AI
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center text-gray-500 py-12">
+                    <p className="text-4xl mb-4"><FaChartBar className="mx-auto" /></p>
+                    <p className="font-semibold">Kết quả dự đoán sẽ hiển thị ở đây</p>
+                    <p className="text-sm mt-2">Upload ảnh lá cây bên trái để bắt đầu</p>
+                  </div>
+                )}
               </div>
-            )}
+            </div>
           </div>
         </div>
 

@@ -1,117 +1,115 @@
-# 🌿 Frontend - Quản lý Vườn Cây (AI Disease Detection)
+# Frontend - Hệ thống quản lý canh tác và dự đoán bệnh trên cây có múi
 
-React + Vite + TailwindCSS frontend application for the agricultural management system with AI-powered disease detection.
+Frontend là giao diện người dùng của hệ thống. Ứng dụng cho phép đăng nhập, quản lý vườn cây, xem nhật ký, tải ảnh lá cây để dự đoán bệnh và sử dụng các chức năng quản trị dành cho admin.
 
-## 📦 Installation
+## 1. Giới thiệu frontend
+
+Frontend được xây dựng bằng React, kết hợp Vite và TailwindCSS để tạo giao diện nhanh, nhẹ và dễ mở rộng. Toàn bộ các màn hình chính của hệ thống như dashboard, quản lý vườn, dự đoán bệnh, thư viện bệnh và trang admin đều được hiển thị từ lớp này.
+
+## 2. Công nghệ sử dụng
+
+- React 18
+- Vite
+- TailwindCSS
+- React Router
+- Axios
+- React Hook Form
+- React Hot Toast
+
+## 3. Cài đặt
 
 ```bash
+cd frontend
 npm install
 ```
 
-## 🚀 Development
+## 4. Chạy project
 
 ```bash
+cd frontend
 npm run dev
 ```
 
-Server sẽ chạy tại: `http://localhost:5173`
+Frontend mặc định chạy tại `http://localhost:5173`.
 
-## 🏗️ Build
+## 5. Cấu hình API (env)
 
-```bash
-npm run build
-```
+Tạo file `.env` trong thư mục `frontend/`:
 
-## 📁 Project Structure
-
-```
-src/
-├── pages/
-│   ├── LoginPage.jsx          # Login page with validation
-│   ├── RegisterPage.jsx       # Sign up page with validation
-│   └── DashboardPage.jsx      # Main dashboard
-├── components/
-│   └── Layout/
-│       ├── AuthLayout.jsx     # Auth pages layout wrapper
-│       └── PrivateRoute.jsx   # Protected route component
-├── services/
-│   ├── apiClient.js          # Axios instance with interceptors
-│   └── authService.js        # Authentication service
-├── App.jsx                    # Main app with routing
-├── main.jsx                   # React entry point
-└── index.css                  # Global styles + TailwindCSS
-```
-
-## 🔐 Features
-
-### ✅ Authentication
-- **Login**: Email + Password validation
-- **Register**: Full name, Email, Password validation
-- **Protected Routes**: Automatic redirect to login if not authenticated
-- **Role-based Access**: Admin vs User differentiation
-- **Token Management**: Auto token refresh on 401 responses
-
-### 🎨 UI/UX
-- Responsive design (mobile + desktop)
-- TailwindCSS styling
-- Smooth transitions and animations
-- Toast notifications (success/error)
-- Show/Hide password toggle
-- Loading states on buttons
-
-### ✔️ Validation
-- Email format validation
-- Password length requirements (min 6 chars)
-- Confirm password matching
-- Form error display
-- Real-time validation feedback
-
-### 📱 Responsive
-- Mobile-first approach
-- Desktop optimized layout
-- Flexible card design
-- Touch-friendly buttons
-
-## 🔧 Environment Variables
-
-Create `.env` file:
-
-```
+```env
 VITE_API_URL=http://localhost:3000/api
 ```
 
-Default: `http://localhost:3000/api`
+Ví dụ với file `.env.local`:
 
-## 🧩 Demo Credentials
-
-```
-Email: admin@gmail.com
-Password: admin123
-Role: admin → redirects to /admin
-Role: user → redirects to /
+```env
+VITE_API_URL=http://localhost:3000/api
 ```
 
-## 📚 Technologies
+## 6. Cấu trúc thư mục
 
-- **React 18** - UI library
-- **React Router 6** - Navigation
-- **React Hook Form** - Form validation
-- **Axios** - HTTP client
-- **TailwindCSS** - Styling
-- **React Hot Toast** - Notifications
-- **Vite** - Build tool
+```text
+frontend/
+├── src/
+│   ├── components/       # Layout, route guard, component dùng chung
+│   ├── pages/            # Các trang chính của hệ thống
+│   ├── services/         # Gọi API, auth, xử lý token
+│   ├── App.jsx           # Khai báo routes
+│   └── main.jsx          # Điểm khởi động ứng dụng
+├── public/
+├── index.html
+└── README.md
+```
 
-## 🚀 Next Steps
+## 7. Các trang chính
 
-1. Run `npm install` to install dependencies
-2. Create `.env` file with API URL
-3. Run `npm run dev` to start development server
-4. Open `http://localhost:5173` in browser
+### Xác thực
 
-## 📝 Notes
+- Trang đăng nhập
+- Trang đăng ký
+- Kiểm tra phiên đăng nhập tự động qua token
 
-- Token is stored in localStorage
-- 401 responses auto-redirect to login
-- User info is persisted in localStorage
-- All API calls include Authorization header with token
-- Form validation uses React Hook Form with custom rules
+### Người dùng
+
+- Dashboard tổng quan
+- Quản lý vườn cây
+- Quản lý nhật ký canh tác
+- Quản lý chi phí
+- Danh sách mùa vụ
+- Thư viện bệnh cây có múi
+
+### Dự đoán bệnh
+
+- Upload ảnh lá cây
+- Xem kết quả dự đoán và độ tin cậy
+- Xem top-k kết quả gợi ý từ model
+
+### Admin
+
+- Quản lý danh sách bệnh
+- Xem trạng thái train của mô hình ML
+- Theo dõi precision, recall, F1, loss
+- Bật/tắt chế độ bảo trì
+
+## 8. Luồng hoạt động
+
+1. Người dùng đăng nhập và nhận token từ backend.
+2. Frontend lưu token và thông tin user trong `localStorage`.
+3. Mọi request API được gửi qua `apiClient`.
+4. Khi backend trả `401`, ứng dụng tự chuyển về trang đăng nhập.
+5. Khi backend bật maintenance mode, frontend chuyển sang trang bảo trì.
+
+## 9. Ví dụ request API
+
+```js
+import apiClient from './services/apiClient';
+
+const response = await apiClient.get('/gardens');
+console.log(response.data);
+```
+
+## 10. Ghi chú
+
+- Frontend cần chạy cùng backend thì các chức năng xác thực và dự đoán mới hoạt động đầy đủ.
+- Nếu đổi địa chỉ backend, chỉ cần cập nhật `VITE_API_URL` trong file `.env`.
+- Giao diện đã được tách thành các trang riêng để dễ bảo trì và mở rộng thêm tính năng mới.

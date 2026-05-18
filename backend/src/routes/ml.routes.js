@@ -35,7 +35,7 @@ const upload = multer({
 
 // Upload training images (Admin only)
 // POST /api/ml/training-images?disease_name=black_spot
-router.post('/training-images', authenticateToken, upload.array('images', 100), uploadTrainingImages);
+router.post('/training-images', authenticateToken, upload.array('images'), uploadTrainingImages);
 
 // Get training status (Admin only)
 // GET /api/ml/status

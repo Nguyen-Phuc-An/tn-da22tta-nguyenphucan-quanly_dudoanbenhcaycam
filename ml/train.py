@@ -43,11 +43,13 @@ import os
 import json
 import shutil
 from pathlib import Path
+import numpy as np
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from tensorflow.keras.applications import MobileNetV2
+from sklearn.metrics import classification_report, precision_score, recall_score, f1_score
 
 # ============================================================================
 # 1. CẤU HÌNH
@@ -56,6 +58,7 @@ from tensorflow.keras.applications import MobileNetV2
 DATASET_DIR = "datasets"
 MODEL_PATH = "model.h5"
 LABEL_FILE = "disease_labels.json"
+TRAINING_REPORT_FILE = "training_report.json"
 IMG_SIZE = 224
 BATCH_SIZE = 32
 EPOCHS = 10
@@ -216,7 +219,8 @@ def create_data_generators(organized_dir):
         target_size=(IMG_SIZE, IMG_SIZE),
         batch_size=BATCH_SIZE,
         class_mode='categorical',
-        subset='validation'
+        subset='validation',
+        shuffle=False
     )
     
     return train_generator, val_generator
@@ -291,6 +295,56 @@ def train_model(model, train_gen, val_gen, num_classes):
     return history
 
 
+def evaluate_classification_metrics(model, val_gen):
+    """Tính precision/recall/F1 trên tập validation."""
+
+    print("\n📈 ĐÁNH GIÁ MÔ HÌNH TRÊN VALIDATION")
+    val_gen.reset()
+
+    y_prob = model.predict(val_gen, verbose=0)
+    y_pred = np.argmax(y_prob, axis=1)
+    y_true = val_gen.classes[:len(y_pred)]
+
+    precision_macro = precision_score(y_true, y_pred, average='macro', zero_division=0)
+    recall_macro = recall_score(y_true, y_pred, average='macro', zero_division=0)
+    f1_macro = f1_score(y_true, y_pred, average='macro', zero_division=0)
+
+    precision_weighted = precision_score(y_true, y_pred, average='weighted', zero_division=0)
+    recall_weighted = recall_score(y_true, y_pred, average='weighted', zero_division=0)
+    f1_weighted = f1_score(y_true, y_pred, average='weighted', zero_division=0)
+
+    print("📊 Macro average:")
+    print(f"  Precision: {precision_macro:.4f}")
+    print(f"  Recall:    {recall_macro:.4f}")
+    print(f"  F1-score:  {f1_macro:.4f}")
+
+    print("\n📊 Weighted average:")
+    print(f"  Precision: {precision_weighted:.4f}")
+    print(f"  Recall:    {recall_weighted:.4f}")
+    print(f"  F1-score:  {f1_weighted:.4f}")
+
+    print("\n📋 Classification report:")
+    target_names = [name for name, _ in sorted(val_gen.class_indices.items(), key=lambda item: item[1])]
+    print(
+        classification_report(
+            y_true,
+            y_pred,
+            labels=list(range(len(target_names))),
+            target_names=target_names,
+            zero_division=0,
+        )
+    )
+
+    return {
+        'precision_macro': precision_macro,
+        'recall_macro': recall_macro,
+        'f1_macro': f1_macro,
+        'precision_weighted': precision_weighted,
+        'recall_weighted': recall_weighted,
+        'f1_weighted': f1_weighted,
+    }
+
+
 # ============================================================================
 # 6. LƯUACL MODEL VÀ MAPPING
 # ============================================================================
@@ -358,6 +412,27 @@ def print_results(history, model_name):
     print("=" * 70)
 
 
+def save_training_report(history, metrics):
+    """Lưu kết quả huấn luyện ra file JSON để backend đọc lại."""
+
+    training_report = {
+        'trainingResults': {
+            'train_accuracy': history.history['accuracy'][-1],
+            'val_accuracy': history.history['val_accuracy'][-1],
+            'train_loss': history.history['loss'][-1],
+            'val_loss': history.history['val_loss'][-1],
+            'best_val_accuracy': max(history.history['val_accuracy']),
+            'best_val_loss': min(history.history['val_loss']),
+        },
+        'evaluation': metrics,
+    }
+
+    with open(TRAINING_REPORT_FILE, 'w', encoding='utf-8') as f:
+        json.dump(training_report, f, indent=2, ensure_ascii=False)
+
+    print(f"✅ Training report saved: {TRAINING_REPORT_FILE}")
+
+
 # ============================================================================
 # 8. MAIN
 # ============================================================================
@@ -385,8 +460,14 @@ if __name__ == "__main__":
         # Bước 5: Lưu
         class_names = save_model_and_labels(model, train_gen)
         
-        # Bước 6: In kết quả
+        # Bước 6: Đánh giá Precision / Recall / F1
+        metrics = evaluate_classification_metrics(model, val_gen)
+
+        # Bước 7: In kết quả
         print_results(history, MODEL_PATH)
+
+        # Bước 8: Lưu report cho frontend/backend
+        save_training_report(history, metrics)
         
     except Exception as e:
         print(f"\n❌ LỖI: {e}")

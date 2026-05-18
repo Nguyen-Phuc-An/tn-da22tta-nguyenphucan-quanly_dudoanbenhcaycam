@@ -4,6 +4,8 @@ const cors = require('cors');
 const path = require('path');
 const connectDB = require('./config/db');
 const User = require('./models/User');
+const jwt = require('jsonwebtoken');
+const { readSiteState } = require('./utils/siteState');
 
 // Import routes
 const userRoutes = require('./routes/user.routes');
@@ -15,6 +17,7 @@ const diseaseRoutes = require('./routes/disease.routes');
 const seasonRoutes = require('./routes/season.routes');
 const taskRoutes = require('./routes/task.routes');
 const chatRoutes = require('./routes/chat.routes');
+const systemRoutes = require('./routes/system.routes');
 // ===== CẬP NHẬT: Thêm Fertilizer & Pesticide routes =====
 const fertilizerRoutes = require('./routes/fertilizer.routes');
 const pesticideRoutes = require('./routes/pesticide.routes');
@@ -77,6 +80,65 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+const getTokenFromRequest = (req) => {
+  const authHeader = req.headers.authorization;
+  let token = authHeader && authHeader.split(' ')[1];
+
+  if (!token && req.query.token) {
+    token = req.query.token;
+  }
+
+  return token;
+};
+
+const maintenanceGuard = async (req, res, next) => {
+  const state = readSiteState();
+
+  if (!state.maintenanceMode) {
+    return next();
+  }
+
+  const publicPaths = [
+    '/api/system/maintenance',
+    '/api/auth/login',
+    '/api/auth/register',
+    '/health',
+  ];
+
+  if (publicPaths.includes(req.originalUrl) || publicPaths.some((prefix) => req.originalUrl.startsWith(prefix))) {
+    return next();
+  }
+
+  const token = getTokenFromRequest(req);
+
+  if (!token) {
+    return res.status(503).json({
+      success: false,
+      maintenanceMode: true,
+      message: 'Hệ thống đang bảo trì',
+    });
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret123');
+    const user = await User.findById(decoded.userId);
+
+    if (user && user.vai_tro === 'admin') {
+      return next();
+    }
+  } catch (error) {
+    // Không cho qua nếu token lỗi
+  }
+
+  return res.status(503).json({
+    success: false,
+    maintenanceMode: true,
+    message: 'Hệ thống đang bảo trì',
+  });
+};
+
+app.use(maintenanceGuard);
+
 // Serve static files (cho uploads)
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 app.use('/disease-dataset', express.static(path.join(__dirname, '../../ml/organized_dataset')));
@@ -119,6 +181,7 @@ app.use('/api/diseases', diseaseRoutes);
 app.use('/api/seasons', seasonRoutes);
 app.use('/api/tasks', taskRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/system', systemRoutes);
 // ===== CẬP NHẬT: Đăng ký Fertilizer & Pesticide routes =====
 app.use('/api/fertilizers', fertilizerRoutes);
 app.use('/api/pesticides', pesticideRoutes);

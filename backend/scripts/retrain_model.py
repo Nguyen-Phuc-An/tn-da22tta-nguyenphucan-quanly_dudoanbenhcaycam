@@ -16,12 +16,14 @@ if sys.platform == 'win32':
 import json
 import shutil
 from pathlib import Path
+import numpy as np
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from tensorflow.keras.applications import MobileNetV2
 from tensorflow.keras.optimizers import Adam
+from sklearn.metrics import classification_report, precision_score, recall_score, f1_score
 
 # ===== ARGUMENTS =====
 if len(sys.argv) < 4:
@@ -156,7 +158,8 @@ def create_data_generators(combined_dir):
         target_size=(IMG_SIZE, IMG_SIZE),
         batch_size=BATCH_SIZE,
         class_mode='categorical',
-        subset='validation'
+        subset='validation',
+        shuffle=False
     )
     
     print(f"[OK] Generators ready")
@@ -229,6 +232,113 @@ def train_model(model, train_gen, val_gen):
     return history
 
 
+def print_training_results(history):
+    """In và xuất kết quả huấn luyện cuối cùng."""
+
+    final_train_accuracy = history.history['accuracy'][-1]
+    final_val_accuracy = history.history['val_accuracy'][-1]
+    final_train_loss = history.history['loss'][-1]
+    final_val_loss = history.history['val_loss'][-1]
+
+    best_val_accuracy = max(history.history['val_accuracy'])
+    best_val_loss = min(history.history['val_loss'])
+
+    results = {
+        'train_accuracy': final_train_accuracy,
+        'val_accuracy': final_val_accuracy,
+        'train_loss': final_train_loss,
+        'val_loss': final_val_loss,
+        'best_val_accuracy': best_val_accuracy,
+        'best_val_loss': best_val_loss,
+    }
+
+    print("[RESULTS] Final training results:")
+    print(f"  Train Accuracy: {final_train_accuracy * 100:.2f}%")
+    print(f"  Val Accuracy:   {final_val_accuracy * 100:.2f}%")
+    print(f"  Train Loss:     {final_train_loss:.4f}")
+    print(f"  Val Loss:       {final_val_loss:.4f}")
+    print(f"  Best Val Acc:   {best_val_accuracy * 100:.2f}%")
+    print(f"  Best Val Loss:  {best_val_loss:.4f}")
+    print(f"TRAIN_RESULTS:{json.dumps(results, ensure_ascii=False)}")
+
+    return results
+
+
+def save_training_report(history, metrics, report_path):
+    """Lưu kết quả huấn luyện ra file JSON để backend đọc lại sau này."""
+
+    training_report = {
+        'trainingResults': {
+            'train_accuracy': history.history['accuracy'][-1],
+            'val_accuracy': history.history['val_accuracy'][-1],
+            'train_loss': history.history['loss'][-1],
+            'val_loss': history.history['val_loss'][-1],
+            'best_val_accuracy': max(history.history['val_accuracy']),
+            'best_val_loss': min(history.history['val_loss']),
+        },
+        'evaluation': metrics,
+    }
+
+    with open(report_path, 'w', encoding='utf-8') as f:
+        json.dump(training_report, f, indent=2, ensure_ascii=False)
+
+    print(f"[RESULTS] Saved training report: {report_path}")
+
+
+def evaluate_classification_metrics(model, val_gen):
+    """Tính precision/recall/F1 trên tập validation."""
+
+    print("\n[METRICS] Validation metrics...")
+    val_gen.reset()
+
+    y_prob = model.predict(val_gen, verbose=0)
+    y_pred = np.argmax(y_prob, axis=1)
+    y_true = val_gen.classes[:len(y_pred)]
+
+    precision_macro = precision_score(y_true, y_pred, average='macro', zero_division=0)
+    recall_macro = recall_score(y_true, y_pred, average='macro', zero_division=0)
+    f1_macro = f1_score(y_true, y_pred, average='macro', zero_division=0)
+
+    precision_weighted = precision_score(y_true, y_pred, average='weighted', zero_division=0)
+    recall_weighted = recall_score(y_true, y_pred, average='weighted', zero_division=0)
+    f1_weighted = f1_score(y_true, y_pred, average='weighted', zero_division=0)
+
+    print("[METRICS] Macro average:")
+    print(f"  Precision: {precision_macro:.4f}")
+    print(f"  Recall:    {recall_macro:.4f}")
+    print(f"  F1-score:  {f1_macro:.4f}")
+
+    print("[METRICS] Weighted average:")
+    print(f"  Precision: {precision_weighted:.4f}")
+    print(f"  Recall:    {recall_weighted:.4f}")
+    print(f"  F1-score:  {f1_weighted:.4f}")
+
+    print("[METRICS] Classification report:")
+    target_names = [name for name, _ in sorted(val_gen.class_indices.items(), key=lambda item: item[1])]
+    print(
+        classification_report(
+            y_true,
+            y_pred,
+            labels=list(range(len(target_names))),
+            target_names=target_names,
+            zero_division=0,
+        )
+    )
+
+    metrics = {
+        'precision_macro': precision_macro,
+        'recall_macro': recall_macro,
+        'f1_macro': f1_macro,
+        'precision_weighted': precision_weighted,
+        'recall_weighted': recall_weighted,
+        'f1_weighted': f1_weighted,
+    }
+
+    print(f"METRICS:{json.dumps(metrics, ensure_ascii=False)}")
+
+    return metrics
+
+
 # ===== SAVE MODEL & LABELS =====
 def save_model_and_labels(model, train_gen, output_path):
     """Lưu model + disease labels"""
@@ -272,7 +382,17 @@ def main():
         model = build_model(num_classes)
         
         # 4. Train
-        train_model(model, train_gen, val_gen)
+        history = train_model(model, train_gen, val_gen)
+
+        # 4.5 Training results
+        results = print_training_results(history)
+
+        # 4.6 Evaluate validation metrics
+        metrics = evaluate_classification_metrics(model, val_gen)
+
+        # 4.7 Save report for backend/frontend
+        report_path = Path(MODEL_PATH).with_name('training_report.json')
+        save_training_report(history, metrics, report_path)
         
         # 5. Save
         save_model_and_labels(model, train_gen, OUTPUT_MODEL_PATH)

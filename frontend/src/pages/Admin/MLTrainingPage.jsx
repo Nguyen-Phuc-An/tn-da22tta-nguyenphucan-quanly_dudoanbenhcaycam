@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { FaUpload, FaSync, FaCog, FaInfoCircle } from 'react-icons/fa';
+import { FaUpload, FaCog, FaInfoCircle, FaChartLine, FaBalanceScale, FaCheckCircle, FaBullseye, FaRegTimesCircle, FaLock, FaUnlock } from 'react-icons/fa';
 import AdminLayout from '../../components/Admin/AdminLayout';
 import apiClient from '../../services/apiClient';
 import toast from 'react-hot-toast';
@@ -10,12 +10,15 @@ const MLTrainingPage = () => {
   const [retraining, setRetraining] = useState(false);
   const [selectedDisease, setSelectedDisease] = useState('');
   const [progress, setProgress] = useState({ progress: 0, status: '', error: null });
+  const [maintenanceMode, setMaintenanceMode] = useState(false);
+  const [maintenanceLoading, setMaintenanceLoading] = useState(false);
   const fileInputRef = useRef(null);
   const eventSourceRef = useRef(null);
 
   // Fetch training status on mount
   useEffect(() => {
     fetchTrainingStatus();
+    fetchMaintenanceStatus();
     return () => {
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
@@ -35,6 +38,36 @@ const MLTrainingPage = () => {
       toast.error('Không thể lấy trạng thái');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchMaintenanceStatus = async () => {
+    try {
+      const res = await apiClient.get('/system/maintenance');
+      if (res.data.success) {
+        setMaintenanceMode(Boolean(res.data.data?.maintenanceMode));
+      }
+    } catch (error) {
+      console.error('❌ Error fetching maintenance status:', error);
+    }
+  };
+
+  const handleToggleMaintenance = async () => {
+    try {
+      setMaintenanceLoading(true);
+      const res = await apiClient.patch('/system/maintenance', {
+        maintenanceMode: !maintenanceMode,
+      });
+
+      if (res.data.success) {
+        setMaintenanceMode(Boolean(res.data.data?.maintenanceMode));
+        toast.success(res.data.message || 'Đã cập nhật chế độ bảo trì');
+      }
+    } catch (error) {
+      console.error('❌ Toggle maintenance error:', error);
+      toast.error(error.response?.data?.message || 'Không thể cập nhật chế độ bảo trì');
+    } finally {
+      setMaintenanceLoading(false);
     }
   };
 
@@ -143,6 +176,43 @@ const MLTrainingPage = () => {
 
   const diseasesData = trainingStatus.status || {};
   const summary = trainingStatus.summary || {};
+  const evaluation = trainingStatus.evaluation || progress.metrics || null;
+  const trainingResults = trainingStatus.trainingResults || progress.trainingResults || null;
+
+  const formatPercent = (value) => `${(Number(value || 0) * 100).toFixed(2)}%`;
+  const formatLoss = (value) => Number(value || 0).toFixed(4);
+
+  const metricCards = evaluation
+    ? [
+        {
+          key: 'precision',
+          label: 'Precision',
+          icon: FaCheckCircle,
+          macro: evaluation.precision_macro,
+          weighted: evaluation.precision_weighted,
+          accent: 'from-emerald-500 to-emerald-600',
+          description: 'Độ đúng của các dự đoán bệnh dương tính',
+        },
+        {
+          key: 'recall',
+          label: 'Recall',
+          icon: FaBalanceScale,
+          macro: evaluation.recall_macro,
+          weighted: evaluation.recall_weighted,
+          accent: 'from-sky-500 to-sky-600',
+          description: 'Khả năng phát hiện các trường hợp bệnh thực tế',
+        },
+        {
+          key: 'f1',
+          label: 'F1-score',
+          icon: FaChartLine,
+          macro: evaluation.f1_macro,
+          weighted: evaluation.f1_weighted,
+          accent: 'from-violet-500 to-violet-600',
+          description: 'Chỉ số cân bằng giữa Precision và Recall',
+        },
+      ]
+    : [];
 
   return (
     <AdminLayout>
@@ -150,14 +220,36 @@ const MLTrainingPage = () => {
         {/* Header */}
         <div className="flex justify-between items-center">
           <h1 className="text-3xl font-bold text-gray-900">⚙️ Đào Tạo ML Model</h1>
-          <button
-            onClick={handleRetrain}
-            disabled={retraining || loading}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:bg-gray-400"
-          >
-            <FaCog className={retraining ? 'animate-spin' : ''} />
-            {retraining ? 'Đang Đào Tạo...' : '🔄 Đào Tạo Lại'}
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleToggleMaintenance}
+              disabled={maintenanceLoading}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-white transition disabled:bg-gray-400 ${maintenanceMode ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'}`}
+            >
+              {maintenanceMode ? <FaUnlock /> : <FaLock />}
+              {maintenanceMode ? 'Mở Khóa Hệ Thống' : 'Bật Bảo Trì'}
+            </button>
+            <button
+              onClick={handleRetrain}
+              disabled={retraining || loading}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:bg-gray-400"
+            >
+              <FaCog className={retraining ? 'animate-spin' : ''} />
+              {retraining ? 'Đang Đào Tạo...' : 'Đào Tạo Lại'}
+            </button>
+          </div>
+        </div>
+
+        <div className={`rounded-2xl border p-4 flex items-center justify-between gap-4 ${maintenanceMode ? 'border-red-200 bg-red-50 text-red-900' : 'border-green-200 bg-green-50 text-green-900'}`}>
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-[0.2em] mb-1">Trạng thái hệ thống</p>
+            <p className="text-lg font-bold">
+              {maintenanceMode ? 'Hệ thống đang bảo trì' : 'Hệ thống đang hoạt động bình thường'}
+            </p>
+          </div>
+          <div className="text-sm font-semibold px-4 py-2 rounded-full bg-white/70 border border-current/20">
+            {maintenanceMode ? 'Locked' : 'Unlocked'}
+          </div>
         </div>
 
         {/* Summary Card */}
@@ -182,6 +274,141 @@ const MLTrainingPage = () => {
           </div>
         </div>
 
+        {/* Training Results */}
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+          <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3 mb-5">
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-[0.2em] text-indigo-600 mb-2">Kết quả huấn luyện</p>
+              <h2 className="text-2xl font-bold text-gray-900">Accuracy / Loss của lần train gần nhất</h2>
+              <p className="text-sm text-gray-500 mt-1">
+                Hiển thị giá trị cuối cùng của epoch cuối và giá trị validation tốt nhất trong lần huấn luyện gần nhất.
+              </p>
+            </div>
+            <div className="text-sm text-gray-500 bg-gray-50 border border-gray-200 rounded-full px-4 py-2 self-start md:self-auto">
+              Train và validation
+            </div>
+          </div>
+
+          {trainingResults ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+              {[
+                {
+                  key: 'train_accuracy',
+                  label: 'Train Accuracy',
+                  value: formatPercent(trainingResults.train_accuracy),
+                  icon: FaBullseye,
+                  accent: 'from-blue-500 to-blue-600',
+                },
+                {
+                  key: 'val_accuracy',
+                  label: 'Val Accuracy',
+                  value: formatPercent(trainingResults.val_accuracy),
+                  icon: FaCheckCircle,
+                  accent: 'from-emerald-500 to-emerald-600',
+                },
+                {
+                  key: 'train_loss',
+                  label: 'Train Loss',
+                  value: formatLoss(trainingResults.train_loss),
+                  icon: FaRegTimesCircle,
+                  accent: 'from-orange-500 to-orange-600',
+                },
+                {
+                  key: 'val_loss',
+                  label: 'Val Loss',
+                  value: formatLoss(trainingResults.val_loss),
+                  icon: FaChartLine,
+                  accent: 'from-violet-500 to-violet-600',
+                },
+              ].map((item) => {
+                const Icon = item.icon;
+
+                return (
+                  <div key={item.key} className="rounded-2xl border border-gray-200 overflow-hidden bg-gray-50 shadow-sm">
+                    <div className={`bg-gradient-to-r ${item.accent} text-white px-5 py-4 flex items-center justify-between`}>
+                      <div>
+                        <p className="text-sm opacity-90">Lần train gần nhất</p>
+                        <h3 className="text-xl font-bold">{item.label}</h3>
+                      </div>
+                      <Icon className="text-2xl opacity-90" />
+                    </div>
+                    <div className="p-5">
+                      <p className="text-4xl font-bold text-gray-900">{item.value}</p>
+                      <p className="mt-3 text-sm text-gray-500">
+                        {item.key.includes('loss')
+                          ? 'Giá trị càng thấp càng tốt'
+                          : 'Giá trị càng cao càng tốt'}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-dashed border-gray-300 bg-gray-50 p-6 text-gray-600">
+              Chưa có kết quả huấn luyện. Hãy chạy đào tạo lại để hệ thống lưu Train Accuracy, Val Accuracy và Loss.
+            </div>
+          )}
+        </div>
+
+        {/* Evaluation Metrics */}
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+          <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3 mb-5">
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-[0.2em] text-blue-600 mb-2">Đánh giá mô hình</p>
+              <h2 className="text-2xl font-bold text-gray-900">Precision / Recall / F1-score</h2>
+              <p className="text-sm text-gray-500 mt-1">
+                Tính trên tập validation sau khi hoàn tất huấn luyện hoặc đào tạo lại.
+              </p>
+            </div>
+            <div className="text-sm text-gray-500 bg-gray-50 border border-gray-200 rounded-full px-4 py-2 self-start md:self-auto">
+              Macro average là chỉ số chính
+            </div>
+          </div>
+
+          {evaluation ? (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {metricCards.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <div key={item.key} className="rounded-2xl border border-gray-200 overflow-hidden bg-gray-50 shadow-sm">
+                    <div className={`bg-gradient-to-r ${item.accent} text-white px-5 py-4 flex items-center justify-between`}>
+                      <div>
+                        <p className="text-sm opacity-90">Macro average</p>
+                        <h3 className="text-xl font-bold">{item.label}</h3>
+                      </div>
+                      <Icon className="text-2xl opacity-90" />
+                    </div>
+                    <div className="p-5">
+                      <div className="flex items-end justify-between gap-4 mb-4">
+                        <div>
+                          <p className="text-sm text-gray-500">Macro</p>
+                          <p className="text-4xl font-bold text-gray-900">{(item.macro * 100).toFixed(2)}%</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm text-gray-500">Weighted</p>
+                          <p className="text-lg font-semibold text-gray-700">{(item.weighted * 100).toFixed(2)}%</p>
+                        </div>
+                      </div>
+                      <div className="h-2 w-full rounded-full bg-gray-200 overflow-hidden">
+                        <div
+                          className={`h-full rounded-full bg-gradient-to-r ${item.accent}`}
+                          style={{ width: `${Math.max(0, Math.min(item.macro * 100, 100))}%` }}
+                        />
+                      </div>
+                      <p className="mt-4 text-sm text-gray-500 leading-relaxed">{item.description}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-dashed border-gray-300 bg-gray-50 p-6 text-gray-600">
+              Chưa có dữ liệu đánh giá. Hãy chạy huấn luyện lại để hệ thống tính Precision, Recall và F1-score.
+            </div>
+          )}
+        </div>
+
         {/* Info */}
         <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded">
           <div className="flex gap-3">
@@ -189,8 +416,8 @@ const MLTrainingPage = () => {
             <div className="text-sm text-blue-800">
               <p className="font-semibold">ℹ️ Hướng dẫn:</p>
               <ul className="list-disc list-inside mt-2 space-y-1">
-                <li>Chọn bệnh → Upload ảnh (tối thiểu 100 ảnh cho bệnh mới)</li>
-                <li>Sau khi upload xong, click "🔄 Đào Tạo Lại" để cập nhật model</li>
+                <li>Chọn bệnh → Upload ảnh, số lượng bao nhiêu cũng được</li>
+                <li>Sau khi upload xong, click "Đào Tạo Lại" để cập nhật model</li>
                 <li>Quá trình đào tạo mất 10-30 phút, chạy nền không cần chờ</li>
               </ul>
             </div>
@@ -211,8 +438,11 @@ const MLTrainingPage = () => {
                 <div className="space-y-4">
                   {/* Disease Name */}
                   <div>
-                    <h3 className="text-lg font-bold text-gray-900">{disease}</h3>
-                    <p className="text-xs text-gray-500">
+                    <h3 className="text-2xl font-bold text-gray-900">
+                      {data.ten_benh || disease}
+                    </h3>
+                    <p className="text-sm font-medium text-gray-500 mt-1">{disease}</p>
+                    <p className="text-xs text-gray-500 mt-1">
                       {data.source === 'original'
                         ? '🎓 Bệnh gốc (organized_dataset)'
                         : '🆕 Bệnh mới'}
@@ -263,9 +493,9 @@ const MLTrainingPage = () => {
                     </div>
                   )}
                   <p className="text-xs text-gray-500 text-center">
-                    {data.total > 100
-                      ? '✓ Đủ dữ liệu'
-                      : `⚠️ Cần ${Math.max(0, 100 - (data.total || 0))} ảnh nữa`}
+                    {data.total > 0
+                      ? `✓ Đã có ${data.total} ảnh, có thể tiếp tục upload thêm bất kỳ lúc nào`
+                      : 'Chưa có ảnh nào cho bệnh này'}
                   </p>
                 </div>
               </div>

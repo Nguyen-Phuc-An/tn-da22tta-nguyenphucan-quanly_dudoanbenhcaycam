@@ -23,7 +23,9 @@ const ChatPage = () => {
       setChats(predictionsWithChats);
     } catch (err) {
       console.error('Error fetching chats:', err);
-      toast.error('Không thể tải danh sách chat');
+      toast.error('Không thể tải danh sách chat', {
+        id: 'admin-chat-list-error',
+      });
     } finally {
       setLoading(false);
     }
@@ -42,7 +44,9 @@ const ChatPage = () => {
       setSelectedChat(res.data.data);
     } catch (err) {
       console.error('Error fetching chat:', err);
-      toast.error('Không thể tải chi tiết chat');
+      toast.error('Không thể tải chi tiết chat', {
+        id: 'admin-chat-detail-error',
+      });
     }
   };
 

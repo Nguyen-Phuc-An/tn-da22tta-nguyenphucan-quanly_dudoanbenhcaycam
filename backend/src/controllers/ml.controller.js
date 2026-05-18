@@ -1,11 +1,13 @@
 const fs = require('fs');
 const path = require('path');
 const { execSync, spawn } = require('child_process');
+const Disease = require('../models/Disease');
 
 // ===== CONSTANTS =====
 const TRAINING_IMAGES_DIR = path.resolve(__dirname, '../../uploads/training');
 const ORGANIZED_DATASET_DIR = path.resolve(__dirname, '../../../ml/organized_dataset');
 const MODEL_PATH = path.resolve(__dirname, '../../../ml/model.h5');
+const TRAINING_REPORT_PATH = path.resolve(__dirname, '../../../ml/training_report.json');
 const RETRAIN_SCRIPT = path.resolve(__dirname, '../../scripts/retrain_model.py');
 const PYTHON_EXE = path.resolve(__dirname, '../../../ml/venv/Scripts/python.exe');
 
@@ -15,6 +17,8 @@ let trainingProgress = {
   progress: 0,
   status: 'Waiting...',
   error: null,
+  metrics: null,
+  trainingResults: null,
 };
 
 const progressClients = new Set(); // SSE clients listening to progress
@@ -29,6 +33,25 @@ const broadcastProgress = () => {
       progressClients.delete(res);
     }
   });
+};
+
+const readTrainingReportFromDisk = () => {
+  try {
+    if (!fs.existsSync(TRAINING_REPORT_PATH)) {
+      return null;
+    }
+
+    const raw = fs.readFileSync(TRAINING_REPORT_PATH, 'utf-8');
+    const parsed = JSON.parse(raw);
+
+    return {
+      trainingResults: parsed.trainingResults || null,
+      evaluation: parsed.evaluation || null,
+    };
+  } catch (error) {
+    console.error('⚠️ Failed to read training report:', error.message);
+    return null;
+  }
 };
 
 const isBenignStderrLine = (line) => {
@@ -134,6 +157,15 @@ const getTrainingStatus = async (req, res) => {
     console.log(`  TRAINING_IMAGES_DIR: ${TRAINING_IMAGES_DIR}`);
     console.log(`  Exists: ${fs.existsSync(TRAINING_IMAGES_DIR)}`);
 
+    const diseaseDocs = await Disease.find({}, { ten_benh: 1, ten_benh_en: 1 }).lean();
+    const diseaseMetaMap = diseaseDocs.reduce((accumulator, diseaseDoc) => {
+      accumulator[diseaseDoc.ten_benh_en] = {
+        ten_benh: diseaseDoc.ten_benh,
+        ten_benh_en: diseaseDoc.ten_benh_en,
+      };
+      return accumulator;
+    }, {});
+
     // Get 9 original diseases
     const original_diseases = [
       'black_spot',
@@ -161,6 +193,7 @@ const getTrainingStatus = async (req, res) => {
         count,
         source: 'original',
         new_images: 0,
+        ...(diseaseMetaMap[disease] || {}),
       };
       total_original += count;
       console.log(`  ${disease}: ${count} ảnh từ ${disease_path}`);
@@ -184,12 +217,15 @@ const getTrainingStatus = async (req, res) => {
               source: 'new',
               new_images: count,
               total: count,
+              ...(diseaseMetaMap[disease] || {}),
             };
           }
           total_training += count;
         }
       });
     }
+
+    const diskReport = readTrainingReportFromDisk();
 
     res.json({
       success: true,
@@ -201,6 +237,8 @@ const getTrainingStatus = async (req, res) => {
           training_images: total_training,
           total_images: total_original + total_training,
         },
+        evaluation: trainingProgress.metrics || diskReport?.evaluation || null,
+        trainingResults: trainingProgress.trainingResults || diskReport?.trainingResults || null,
       },
     });
   } catch (error) {
@@ -236,6 +274,8 @@ const triggerRetrain = async (req, res) => {
       progress: 0,
       status: 'Initializing...',
       error: null,
+      metrics: null,
+      trainingResults: null,
     };
     broadcastProgress();
 
@@ -267,6 +307,26 @@ const triggerRetrain = async (req, res) => {
         trainingProgress.progress = parseInt(progress);
         trainingProgress.status = status;
         broadcastProgress();
+      }
+
+      const metricsMatch = output.match(/METRICS:(\{.*\})/);
+      if (metricsMatch) {
+        try {
+          trainingProgress.metrics = JSON.parse(metricsMatch[1]);
+          broadcastProgress();
+        } catch (parseError) {
+          console.error('⚠️ Failed to parse training metrics:', parseError.message);
+        }
+      }
+
+      const resultsMatch = output.match(/TRAIN_RESULTS:(\{.*\})/);
+      if (resultsMatch) {
+        try {
+          trainingProgress.trainingResults = JSON.parse(resultsMatch[1]);
+          broadcastProgress();
+        } catch (parseError) {
+          console.error('⚠️ Failed to parse training results:', parseError.message);
+        }
       }
     });
 
@@ -314,6 +374,7 @@ const triggerRetrain = async (req, res) => {
         status: 'training',
         estimated_time: '10-30 minutes',
       },
+      trainingResults: trainingProgress.trainingResults,
     });
   } catch (error) {
     console.error('❌ Retrain trigger error:', error.message);
